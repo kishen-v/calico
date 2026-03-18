@@ -296,17 +296,17 @@ $(NODE_CONTAINER_CREATED): $(REMOTE_DEPS) ./Dockerfile.$(ARCH) $(NODE_CONTAINER_
 		--build-arg BIRD_IMAGE=$(BIRD_IMAGE) \
 		--build-context nft-rpms=docker-image://$(NFT_RPMS_IMAGE) \
 		--build-arg GIT_VERSION=$(GIT_VERSION) \
-		-t $(NODE_IMAGE):latest-$(ARCH) -f ./Dockerfile.$(ARCH) .
+		-t $(NODE_IMAGE):latest-$(ARCH) -f ./Dockerfile .
 	$(MAKE) retag-build-images-with-registries VALIDARCHES=$(ARCH) IMAGETAG=latest
 	touch $@
 
-$(NODE_CONTAINER_FIPS_CREATED): $(REMOTE_DEPS) ./Dockerfile.$(ARCH) $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE | nft-rpms-image
+$(NODE_CONTAINER_FIPS_CREATED): $(REMOTE_DEPS) ./Dockerfile $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE | nft-rpms-image
 	$(DOCKER_BUILD) --network=host \
 		--build-arg BIN_DIR=$(NODE_CONTAINER_BIN_DIR) \
 		--build-arg BIRD_IMAGE=$(BIRD_IMAGE) \
 		--build-context nft-rpms=docker-image://$(NFT_RPMS_IMAGE) \
 		--build-arg GIT_VERSION=$(GIT_VERSION) \
-		-t $(NODE_IMAGE):latest-fips-$(ARCH) -f ./Dockerfile.$(ARCH) .
+		-t $(NODE_IMAGE):latest-fips-$(ARCH) -f ./Dockerfile .
 	$(MAKE) retag-build-images-with-registries VALIDARCHES=$(ARCH) IMAGETAG=latest-fips LATEST_IMAGE_TAG=latest-fips
 	touch $@
 
