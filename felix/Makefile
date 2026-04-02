@@ -155,15 +155,14 @@ bin/calico-felix: bin/calico-felix-$(ARCH)
 libbpf: $(LIBBPF_A)
 clone-libbpf: $(LIBBPF_FILE_CREATED)
 
-$(LIBBPF_FILE_CREATED):
+$(LIBBPF_FILE_CREATED): register
 	@echo Cloning libbpf
-	$(DOCKER_RUN) $(CALICO_BUILD) sh -c "make -j 16 -C bpf-gpl libbpf LIBBPF_VERSION=$(LIBBPF_VERSION)"
+	$(DOCKER_RUN) $(CALICO_BUILD) sh -c "make -j$(nproc) -C bpf-gpl libbpf LIBBPF_VERSION=$(LIBBPF_VERSION)"
 
 $(LIBBPF_A): $(LIBBPF_FILE_CREATED) $(shell find bpf-gpl/libbpf -type f -not -path 'bpf-gpl/libbpf/src/$(ARCH)*' )
 	mkdir -p bpf-gpl/libbpf/src/$(ARCH)
 	mkdir -p bpf-gpl/include/src/$(ARCH)
-	$(MAKE) register ARCH=$(ARCH)
-	$(DOCKER_RUN) $(CALICO_BUILD) sh -c "make -j 16 -C bpf-gpl/libbpf/src BUILD_STATIC_ONLY=1 OBJDIR=$(ARCH)"
+	$(DOCKER_RUN) $(CALICO_BUILD) sh -c "make -j$(nproc) -C bpf-gpl/libbpf/src BUILD_STATIC_ONLY=1 OBJDIR=$(ARCH)"
 
 DOCKER_GO_BUILD_CGO=$(DOCKER_RUN) $(TARGET_PLATFORM) -e CGO_ENABLED=$(CGO_ENABLED) -e CGO_LDFLAGS=$(CGO_LDFLAGS) -e CGO_CFLAGS=$(CGO_CFLAGS) $(CALICO_BUILD)
 
@@ -230,8 +229,18 @@ $(ALL_BPF_PROGS) &: $(shell find bpf-gpl bpf-apache -name '*.[ch]') bpf-gpl/Make
 	                          make -j 16 -C bpf-gpl all ut-objs map-objs"
 	rm -rf bin/bpf
 	mkdir -p bin/bpf
-	touch -c $(ALL_BPF_PROGS)
-	cp $(ALL_BPF_PROGS) bin/bpf
+	cp $(BPF_GPL_O_FILES) $(BPF_APACHE_O_FILES) bin/bpf
+
+$(BPF_APACHE_O_FILES) &: register $(shell find bpf-apache -name '*.[ch]') bpf-apache/Makefile
+	$(DOCKER_GO_BUILD) make -j$(shell nproc) -C bpf-apache all
+	touch -c $@
+
+$(BPF_GPL_O_FILES) $(BPF_GPL_UT_O_FILES) &: register $(shell find bpf-gpl -name '*.[ch]') bpf-gpl/Makefile
+	$(DOCKER_GO_BUILD) make -j$(shell nproc) -C bpf-gpl all ut-objs map-objs
+	touch -c $@
+
+bpf-gpl/%_map_stub.c: bpf-gpl/Makefile
+	$(MAKE) -C bpf-gpl $(@F)
 
 clean-bpf:
 	rm -f bpf-gpl/*.d bpf-apache/*.d
