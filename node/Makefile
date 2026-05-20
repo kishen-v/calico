@@ -280,20 +280,37 @@ dist/LICENSE: ../LICENSE.md
 
 # register is order-only (|) so binfmt setup doesn't trigger unnecessary rebuilds.
 image $(NODE_IMAGE): $(NODE_CONTAINER_MARKER) | register
-$(NODE_CONTAINER_CREATED): $(IMAGE_DEPS) $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE
+# nft-rpms-image builds (or no-ops on cache hit) the per-arch producer image
+# carrying our patched nftables + libnftnl RPMs. It's an order-only prereq;
+# the consumer build wires it in via --build-context nft-rpms=docker-image://...
+# so buildkit sources it from the local daemon (avoiding `--pull=always`
+# trying to fetch it from a registry where it may not have been pushed yet).
+.PHONY: nft-rpms-image
+nft-rpms-image:
+	$(MAKE) -C ../hack/rpms/nftables image ARCH=$(ARCH)
+
+# Drop --pull from DOCKER_BUILD: with --pull=always, buildkit treats the
+# nft-rpms build context (docker-image://calico/nftables-rpms:<sha>-<arch>)
+# as a registry pull and fails when that tag hasn't been pushed yet (PR
+# builds, fresh local builds). Other base images (UBI_IMAGE, BIRD_IMAGE,
+# BPFTOOL_IMAGE) are pinned by tag so cache freshness is fine without --pull.
+
+$(NODE_CONTAINER_CREATED): $(IMAGE_DEPS) $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE | nft-rpms-image
 	$(DOCKER_BUILD) \
 		--build-arg BIN_DIR=$(NODE_CONTAINER_BIN_DIR) \
 		--build-arg BIRD_IMAGE=$(BIRD_IMAGE) \
+		--build-context nft-rpms=docker-image://$(NFT_RPMS_IMAGE) \
 		--build-arg BPFTOOL_IMAGE=$(BPFTOOL_IMAGE) \
 		--build-arg GIT_VERSION=$(GIT_VERSION) \
 		-t $(NODE_IMAGE):latest-$(ARCH) -f ./Dockerfile .
 	$(MAKE) retag-build-images-with-registries VALIDARCHES=$(ARCH) IMAGETAG=latest
 	touch $@
 
-$(NODE_CONTAINER_FIPS_CREATED): $(IMAGE_DEPS) $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE
+$(NODE_CONTAINER_FIPS_CREATED): $(IMAGE_DEPS) $(NODE_CONTAINER_BINARY) $(INCLUDED_SOURCE) $(NODE_CONTAINER_FILES) $(TOOLS_MOUNTNS_BINARY) dist/LICENSE | nft-rpms-image
 	$(DOCKER_BUILD) \
 		--build-arg BIN_DIR=$(NODE_CONTAINER_BIN_DIR) \
 		--build-arg BIRD_IMAGE=$(BIRD_IMAGE) \
+		--build-context nft-rpms=docker-image://$(NFT_RPMS_IMAGE) \
 		--build-arg BPFTOOL_IMAGE=$(BPFTOOL_IMAGE) \
 		--build-arg GIT_VERSION=$(GIT_VERSION) \
 		-t $(NODE_IMAGE):latest-fips-$(ARCH) -f ./Dockerfile .
